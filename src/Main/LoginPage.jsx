@@ -1,16 +1,28 @@
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import { db } from "../Firebase/config";
 import { collection, query, where, getDocs } from "firebase/firestore";
 import { useNavigate } from "react-router-dom";
 import "./LoginPage.css";
 
 const LoginPage = ({ setIsAuthenticated }) => {
-  const [email, setEmail] = useState("");
+  const [id, setId] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
 
   const navigate = useNavigate();
+
+  useEffect(() => {
+    // Check for existing authentication
+    const storedAuth = localStorage.getItem("isAuthenticated");
+    const storedRouteName = localStorage.getItem("routeName");
+    
+    if (storedAuth === "true" && storedRouteName) {
+      setIsAuthenticated(true);
+      // Use window.location instead of navigate to ensure complete reload
+      window.location.href = `/dashboard/${storedRouteName}`;
+    }
+  }, [navigate, setIsAuthenticated]);
 
   const handleLogin = async (e) => {
     e.preventDefault();
@@ -18,26 +30,35 @@ const LoginPage = ({ setIsAuthenticated }) => {
     setError("");
 
     try {
-      const usersRef = collection(db, "users");
-      const q = query(usersRef, where("email", "==", email));
+      const routesRef = collection(db, "routes");
+      const q = query(routesRef, where("id", "==", id));
       const querySnapshot = await getDocs(q);
 
       if (querySnapshot.empty) {
-        setError("User not found. Please check your email.");
+        setError("Route not found. Please check your ID.");
         return;
       }
 
-      const userDoc = querySnapshot.docs[0];
-      const userData = userDoc.data();
+      const routeDoc = querySnapshot.docs[0];
+      const routeData = routeDoc.data();
 
-      if (userData.password !== password) {
+      if (!routeData.name) {
+        setError("Route name is missing in database.");
+        return;
+      }
+
+      if (routeData.password !== password) {
         setError("Incorrect password. Please try again.");
         return;
       }
 
       setIsAuthenticated(true);
-      localStorage.setItem("isAuthenticated", true);
-      navigate("/main");
+      localStorage.setItem("isAuthenticated", "true");
+      localStorage.setItem("routeName", routeData.name);
+      localStorage.setItem("routeId", id);
+      
+      // Force full page reload to ensure all state is initialized
+      window.location.href = `/dashboard/${routeData.name}`;
     } catch (error) {
       console.error("Error during login:", error);
       setError("An error occurred. Please try again later.");
@@ -48,15 +69,15 @@ const LoginPage = ({ setIsAuthenticated }) => {
 
   return (
     <div className="login-page-container">
-      <h2>Login</h2>
+      <h2>Route Login</h2>
       <form onSubmit={handleLogin} className="login-form">
         <div className="form-group">
-          <label>Email:</label>
+          <label>Route ID:</label>
           <input
-            type="email"
-            value={email}
-            onChange={(e) => setEmail(e.target.value)}
-            placeholder="Enter your email"
+            type="text"
+            value={id}
+            onChange={(e) => setId(e.target.value)}
+            placeholder="Enter your route ID"
             required
           />
         </div>

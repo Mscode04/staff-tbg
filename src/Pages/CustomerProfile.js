@@ -26,7 +26,7 @@ import {
 import { format } from 'date-fns';
 
 const CustomerProfile = () => {
-  const { id } = useParams();
+  const { id } = useParams(); // This is the Firebase document ID
   const navigate = useNavigate();
   const [customer, setCustomer] = useState(null);
   const [sales, setSales] = useState([]);
@@ -36,18 +36,24 @@ const CustomerProfile = () => {
   useEffect(() => {
     const fetchCustomerData = async () => {
       try {
-        // Fetch customer
-        const customerDoc = await getDoc(doc(db, "customers", id));
+        // Fetch customer using the document ID directly
+        const customerDocRef = doc(db, "customers", id);
+        const customerDoc = await getDoc(customerDocRef);
+        
         if (!customerDoc.exists()) {
           throw new Error("Customer not found");
         }
-        const customerData = { id: customerDoc.id, ...customerDoc.data() };
+        
+        const customerData = {
+          firebaseId: customerDoc.id, // Storing the document ID explicitly
+          ...customerDoc.data()
+        };
         setCustomer(customerData);
         
-        // Fetch sales
+        // Fetch sales using document reference
         const salesQuery = query(
           collection(db, "sales"),
-          where("customerId", "==", customerDoc.id)
+          where("customerRef", "==", customerDocRef)
         );
         const salesSnapshot = await getDocs(salesQuery);
         const salesData = salesSnapshot.docs.map(doc => ({
@@ -109,8 +115,8 @@ const CustomerProfile = () => {
             <List>
               <ListItem>
                 <ListItemText 
-                  primary="Customer ID" 
-                  secondary={customer.customerId || 'N/A'} 
+                  primary="Firebase Document ID" 
+                  secondary={customer.firebaseId} 
                 />
               </ListItem>
               <Divider />
@@ -167,21 +173,21 @@ const CustomerProfile = () => {
         <Box sx={{ display: 'flex', gap: 2, mt: 4 }}>
           <Button 
             variant="contained"
-            onClick={() => navigate(`/customer/edit/${customer.id}`)}
+            onClick={() => navigate(`/customers/edit/${customer.firebaseId}`)}
           >
             Edit Profile
           </Button>
           <Button 
             variant="contained"
             color="success"
-            onClick={() => navigate(`/sales/new?customerId=${customer.id}`)}
+            onClick={() => navigate(`/sales/new?customerId=${customer.firebaseId}`)}
           >
             New Sale
           </Button>
           <Button 
             variant="contained"
             color="secondary"
-            onClick={() => navigate(`/payments/new?customerId=${customer.id}`)}
+            onClick={() => navigate(`/payments/new?customerId=${customer.firebaseId}`)}
           >
             Record Payment
           </Button>

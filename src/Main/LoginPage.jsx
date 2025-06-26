@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from "react";
 import { db } from "../Firebase/config";
-import { collection, query, where, getDocs } from "firebase/firestore";
+import { collection, query, where, getDocs, addDoc, serverTimestamp } from "firebase/firestore";
 import { useNavigate } from "react-router-dom";
 import "./LoginPage.css";
 
@@ -19,10 +19,28 @@ const LoginPage = ({ setIsAuthenticated }) => {
     
     if (storedAuth === "true" && storedRouteName) {
       setIsAuthenticated(true);
-      // Use window.location instead of navigate to ensure complete reload
-      window.location.href = `/dashboard/${storedRouteName}`;
+      scheduleMidnightLogout();
+      navigate(`/dashboard/${storedRouteName}`);
     }
   }, [navigate, setIsAuthenticated]);
+
+  const scheduleMidnightLogout = () => {
+    const now = new Date();
+    const midnight = new Date(
+      now.getFullYear(),
+      now.getMonth(),
+      now.getDate() + 1,
+      0, 0, 0
+    );
+    const timeUntilMidnight = midnight - now;
+
+    setTimeout(() => {
+      localStorage.removeItem("isAuthenticated");
+      localStorage.removeItem("routeName");
+      localStorage.removeItem("routeId");
+      window.location.href = "/login";
+    }, timeUntilMidnight);
+  };
 
   const handleLogin = async (e) => {
     e.preventDefault();
@@ -52,13 +70,23 @@ const LoginPage = ({ setIsAuthenticated }) => {
         return;
       }
 
+      // Record login session
+      const sessionsRef = collection(db, "sessions");
+      await addDoc(sessionsRef, {
+        routeId: id,
+        routeName: routeData.name,
+        loginTime: serverTimestamp(),
+        logoutTime: null,
+        date: new Date().toISOString().split('T')[0]
+      });
+
       setIsAuthenticated(true);
       localStorage.setItem("isAuthenticated", "true");
       localStorage.setItem("routeName", routeData.name);
       localStorage.setItem("routeId", id);
       
-      // Force full page reload to ensure all state is initialized
-      window.location.href = `/dashboard/${routeData.name}`;
+      scheduleMidnightLogout();
+      navigate(`/dashboard/${routeData.name}`);
     } catch (error) {
       console.error("Error during login:", error);
       setError("An error occurred. Please try again later.");

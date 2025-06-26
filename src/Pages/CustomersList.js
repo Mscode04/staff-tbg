@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { db } from "../Firebase/config";
-import { collection, getDocs, query, where } from "firebase/firestore";
+import { collection, getDocs } from "firebase/firestore";
 import { 
   Box, 
   Button, 
@@ -30,7 +30,7 @@ const AllCustomersList = () => {
       try {
         const querySnapshot = await getDocs(collection(db, "customers"));
         const customersData = querySnapshot.docs.map(doc => ({
-          id: doc.id,
+          firebaseId: doc.id, // Using Firebase document ID as the primary identifier
           ...doc.data()
         }));
         setCustomers(customersData);
@@ -85,7 +85,6 @@ const AllCustomersList = () => {
         <Table sx={{ minWidth: 650 }} aria-label="customers table">
           <TableHead sx={{ bgcolor: 'primary.main' }}>
             <TableRow>
-              <TableCell sx={{ color: 'white' }}>ID</TableCell>
               <TableCell sx={{ color: 'white' }}>Name</TableCell>
               <TableCell sx={{ color: 'white' }}>Route</TableCell>
               <TableCell sx={{ color: 'white' }}>Phone</TableCell>
@@ -96,8 +95,7 @@ const AllCustomersList = () => {
           </TableHead>
           <TableBody>
             {customers.map((customer) => (
-              <TableRow key={customer.id}>
-                <TableCell>{customer.customerId || '-'}</TableCell>
+              <TableRow key={customer.firebaseId}>
                 <TableCell>{customer.name}</TableCell>
                 <TableCell>{customer.route || '-'}</TableCell>
                 <TableCell>{customer.phone}</TableCell>
@@ -112,7 +110,7 @@ const AllCustomersList = () => {
                   <Button 
                     variant="outlined"
                     size="small"
-                    onClick={() => navigate(`/customer/${customer.id}`)}
+                    onClick={() => navigate(`/customer/${customer.firebaseId}`)} // Using Firebase document ID
                   >
                     View
                   </Button>

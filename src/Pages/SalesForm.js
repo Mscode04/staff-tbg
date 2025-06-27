@@ -1,10 +1,12 @@
 import React, { useState, useEffect } from "react";
 import { collection, addDoc, getDocs, query, where, updateDoc } from "firebase/firestore";
 import { db } from "../Firebase/config";
-// import "./SalesForm.css"; // Make sure to create this CSS file
+import Select from 'react-select';
+import { ToastContainer, toast } from 'react-toastify';
+import 'react-toastify/dist/ReactToastify.css';
+import 'bootstrap/dist/css/bootstrap.min.css';
 
 const SalesForm = () => {
-  // Get routeName from localStorage
   const routeName = localStorage.getItem("routeName");
   
   const [customers, setCustomers] = useState([]);
@@ -15,8 +17,6 @@ const SalesForm = () => {
     initial: true,
     submitting: false
   });
-  const [error, setError] = useState(null);
-  const [success, setSuccess] = useState(null);
   
   const [formData, setFormData] = useState({
     id: `TBG${new Date().toISOString().replace(/[-:T.]/g, "").slice(0, 14)}`,
@@ -34,17 +34,13 @@ const SalesForm = () => {
     route: routeName
   });
 
+  // Fetch customers and products
   useEffect(() => {
     const fetchData = async () => {
       try {
-        if (!routeName) {
-          throw new Error("Route information not found. Please login again.");
-        }
-
         setLoading(prev => ({ ...prev, initial: true }));
-        setError(null);
         
-        // Fetch customers for this route only
+        // 1. Fetch customers
         const customersQuery = query(
           collection(db, "customers"),
           // where("route", "==", routeName)
@@ -56,9 +52,10 @@ const SalesForm = () => {
           ...doc.data()
         }));
         
+        console.log("Fetched customers:", customersData); // Debug log
         setCustomers(customersData);
         
-        // Fetch all products
+        // 2. Fetch products
         const productsSnapshot = await getDocs(collection(db, "products"));
         const productsData = productsSnapshot.docs.map(doc => ({
           docId: doc.id,
@@ -69,75 +66,113 @@ const SalesForm = () => {
         
       } catch (err) {
         console.error("Error fetching data:", err);
-        setError(err.message);
+        toast.error(`Error loading data: ${err.message}`);
       } finally {
         setLoading(prev => ({ ...prev, initial: false }));
       }
     };
     
-    fetchData();
+    if (routeName) {
+      fetchData();
+    } else {
+      toast.error("Route information not found. Please login again.");
+    }
   }, [routeName]);
 
-  useEffect(() => {
-    if (formData.customerId) {
-      const customer = customers.find(c => c.id === formData.customerId);
-      if (customer) {
-        setSelectedCustomer(customer);
-        setFormData(prev => ({
-          ...prev,
-          customerData: customer,
-          previousBalance: customer.currentBalance || 0,
-          totalBalance: (customer.currentBalance || 0) + prev.todayCredit - prev.totalAmountReceived
-        }));
-      }
-    }
-  }, [formData.customerId, customers]);
+  // Format customers for dropdown
+  const customerOptions = customers.map(customer => ({
+    value: customer.id || customer.docId,
+    label: `${customer.name} (${customer.phone}) - Balance: ₹${customer.currentBalance || 0}`,
+    customer
+  }));
 
-  useEffect(() => {
-    if (formData.productId) {
-      const product = products.find(p => p.id === formData.productId);
-      if (product) {
-        setSelectedProduct(product);
-        setFormData(prev => ({
-          ...prev,
-          productData: product,
-          todayCredit: product.price * prev.salesQuantity,
-          totalBalance: (prev.previousBalance || 0) + (product.price * prev.salesQuantity) - prev.totalAmountReceived
-        }));
-      }
-    }
-  }, [formData.productId, products, formData.salesQuantity]);
+  // Format products for dropdown
+  const productOptions = products.map(product => ({
+    value: product.id || product.docId,
+    label: `${product.name} (₹${product.price})`,
+    product
+  }));
 
-  const handleChange = (e) => {
-    const { name, value } = e.target;
-    setFormData(prev => ({ 
-      ...prev, 
-      [name]: name === "salesQuantity" || name === "emptyQuantity" || name === "totalAmountReceived" 
-        ? Math.max(0, parseInt(value) || 0)
-        : value 
-    }));
+  // Handle customer selection
+  const handleCustomerChange = (selectedOption) => {
+    if (selectedOption) {
+      const customer = selectedOption.customer;
+      setSelectedCustomer(customer);
+      setFormData(prev => ({
+        ...prev,
+        customerId: selectedOption.value,
+        customerData: customer,
+        previousBalance: customer.currentBalance || 0,
+        totalBalance: (customer.currentBalance || 0) + prev.todayCredit - prev.totalAmountReceived
+      }));
+    } else {
+      setSelectedCustomer(null);
+      setFormData(prev => ({
+        ...prev,
+        customerId: "",
+        customerData: null,
+        previousBalance: 0,
+        totalBalance: prev.todayCredit - prev.totalAmountReceived
+      }));
+    }
   };
 
+  // Handle product selection
+  const handleProductChange = (selectedOption) => {
+    if (selectedOption) {
+      const product = selectedOption.product;
+      setSelectedProduct(product);
+      setFormData(prev => ({
+        ...prev,
+        productId: selectedOption.value,
+        productData: product,
+        todayCredit: product.price * prev.salesQuantity,
+        totalBalance: (prev.previousBalance || 0) + (product.price * prev.salesQuantity) - prev.totalAmountReceived
+      }));
+    } else {
+      setSelectedProduct(null);
+      setFormData(prev => ({
+        ...prev,
+        productId: "",
+        productData: null,
+        todayCredit: 0,
+        totalBalance: (prev.previousBalance || 0) - prev.totalAmountReceived
+      }));
+    }
+  };
+
+  // Handle form field changes
+  const handleChange = (e) => {
+    const { name, value } = e.target;
+    const newValue = name === "salesQuantity" || name === "emptyQuantity" || name === "totalAmountReceived" 
+      ? Math.max(0, parseInt(value) || 0)
+      : value;
+    
+    setFormData(prev => {
+      const updatedData = { ...prev, [name]: newValue };
+      
+      // Recalculate balances when relevant fields change
+      if (name === "salesQuantity" || name === "totalAmountReceived") {
+        updatedData.todayCredit = selectedProduct ? selectedProduct.price * updatedData.salesQuantity : 0;
+        updatedData.totalBalance = (updatedData.previousBalance || 0) + 
+                                 updatedData.todayCredit - 
+                                 updatedData.totalAmountReceived;
+      }
+      
+      return updatedData;
+    });
+  };
+
+  // Handle form submission
   const handleSubmit = async (e) => {
     e.preventDefault();
     setLoading(prev => ({ ...prev, submitting: true }));
-    setError(null);
-    setSuccess(null);
 
     try {
       // Validate form
-      if (!routeName) {
-        throw new Error("Route information not found. Please login again.");
-      }
-      if (!formData.customerId) {
-        throw new Error("Please select a customer");
-      }
-      if (!formData.productId) {
-        throw new Error("Please select a product");
-      }
-      if (formData.salesQuantity < 1) {
-        throw new Error("Sales quantity must be at least 1");
-      }
+      if (!formData.customerId) throw new Error("Please select a customer");
+      if (!formData.productId) throw new Error("Please select a product");
+      if (formData.salesQuantity < 1) throw new Error("Sales quantity must be at least 1");
       if (selectedCustomer && formData.emptyQuantity > selectedCustomer.currentGasOnHand) {
         throw new Error(`Cannot take back more cylinders (${formData.emptyQuantity}) than customer has (${selectedCustomer.currentGasOnHand})`);
       }
@@ -193,10 +228,10 @@ const SalesForm = () => {
       setSelectedProduct(null);
       setSelectedCustomer(null);
       
-      setSuccess("Sale recorded successfully!");
+      toast.success("Sale recorded successfully!");
     } catch (err) {
       console.error("Error processing sale:", err);
-      setError(err.message);
+      toast.error(err.message);
     } finally {
       setLoading(prev => ({ ...prev, submitting: false }));
     }
@@ -204,219 +239,255 @@ const SalesForm = () => {
 
   if (!routeName) {
     return (
-      <div className="error-container">
-        <h2>Route Information Missing</h2>
-        <p>Please login again to access the sales form.</p>
-      </div>
-    );
-  }
-
-  if (loading.initial) {
-    return (
-      <div className="loading-container">
-        <p>Loading form data...</p>
-      </div>
-    );
-  }
-
-  if (error && !loading.initial) {
-    return (
-      <div className="error-container">
-        <p>{error}</p>
-        <button onClick={() => window.location.reload()}>Try Again</button>
+      <div className="container mt-5">
+        <div className="alert alert-danger">
+          <h2>Route Information Missing</h2>
+          <p>Please login again to access the sales form.</p>
+        </div>
       </div>
     );
   }
 
   return (
-    <div className="sales-form-container">
-      <h2>New Sale - {routeName} Route</h2>
+    <div className="container mt-2">
+      <ToastContainer position="top-right" autoClose={3000} />
       
-      {success && (
-        <div className="success-message">
-          <p>{success}</p>
-        </div>
-      )}
-      
-      <form onSubmit={handleSubmit} className="sales-form">
-        <div className="form-group">
-          <label>Sale ID:</label>
-          <input
-            type="text"
-            name="id"
-            value={formData.id}
-            readOnly
-          />
+      <div className="card shadow">
+        <div className="card-header bg-primary text-white">
+          <h2 className="mb-0">New Sale</h2>
         </div>
         
-        <div className="form-group">
-          <label>Date:</label>
-          <input
-            type="date"
-            name="date"
-            value={formData.date}
-            onChange={handleChange}
-            required
-          />
+        <div className="card-body">
+          <form onSubmit={handleSubmit}>
+            <div className="row mb-3">
+              <div className="col-md-6">
+                <label className="form-label">Sale ID</label>
+                <input
+                  type="text"
+                  className="form-control"
+                  value={formData.id}
+                  readOnly
+                />
+              </div>
+              
+              <div className="col-md-6">
+                <label className="form-label">Date</label>
+                <input
+                  type="date"
+                  className="form-control"
+                  name="date"
+                  value={formData.date}
+                  onChange={handleChange}
+                  required
+                />
+              </div>
+            </div>
+            
+            <div className="row mb-3">
+              <div className="col-md-6">
+                <label className="form-label">Route</label>
+                <input
+                  type="text"
+                  className="form-control"
+                  value={routeName}
+                  readOnly
+                />
+              </div>
+            </div>
+            
+            <div className="row mb-3">
+              <div className="col-md-12">
+                <label className="form-label">Customer</label>
+                <Select
+                  options={customerOptions}
+                  value={customerOptions.find(option => option.value === formData.customerId)}
+                  onChange={handleCustomerChange}
+                  placeholder="Select Customer"
+                  isClearable
+                  isSearchable
+                  isLoading={loading.initial}
+                  noOptionsMessage={() => "No customers found"}
+                  classNamePrefix="select"
+                  styles={{
+                    control: (base) => ({
+                      ...base,
+                      minHeight: '38px',
+                      borderColor: '#ced4da',
+                      '&:hover': {
+                        borderColor: '#ced4da'
+                      }
+                    })
+                  }}
+                />
+              </div>
+            </div>
+            
+            {selectedCustomer && (
+              <div className="alert alert-info mb-3">
+                <div className="row">
+                  <div className="col-md-4">
+                    <p><strong>Current Balance:</strong> ₹{selectedCustomer.currentBalance || 0}</p>
+                  </div>
+                  <div className="col-md-4">
+                    <p><strong>Cylinders On Hand:</strong> {selectedCustomer.currentGasOnHand || 0}</p>
+                  </div>
+                
+                </div>
+              </div>
+            )}
+            
+            <div className="row mb-3">
+              <div className="col-md-12">
+                <label className="form-label">Product</label>
+                <Select
+                  options={productOptions}
+                  value={productOptions.find(option => option.value === formData.productId)}
+                  onChange={handleProductChange}
+                  placeholder="Select Product"
+                  isClearable
+                  isSearchable
+                  isLoading={loading.initial}
+                  noOptionsMessage={() => "No products found"}
+                  classNamePrefix="select"
+                  styles={{
+                    control: (base) => ({
+                      ...base,
+                      minHeight: '38px',
+                      borderColor: '#ced4da',
+                      '&:hover': {
+                        borderColor: '#ced4da'
+                      }
+                    })
+                  }}
+                />
+              </div>
+            </div>
+            
+            {selectedProduct && (
+              <>
+                <div className="row mb-3">
+                  <div className="col-md-4">
+                    <label className="form-label">Product Price (₹)</label>
+                    <input
+                      type="number"
+                      className="form-control"
+                      value={selectedProduct.price}
+                      readOnly
+                    />
+                  </div>
+                  
+                  <div className="col-md-4">
+                    <label className="form-label">Sales Quantity</label>
+                    <input
+                      type="number"
+                      className="form-control"
+                      name="salesQuantity"
+                      value={formData.salesQuantity}
+                      onChange={handleChange}
+                      required
+                      min="1"
+                      disabled={loading.submitting}
+                    />
+                  </div>
+                  
+                  <div className="col-md-4">
+                    <label className="form-label">Empty Cylinders Returned</label>
+                    <input
+                      type="number"
+                      className="form-control"
+                      name="emptyQuantity"
+                      value={formData.emptyQuantity}
+                      onChange={handleChange}
+                      required
+                      min="0"
+                      max={selectedCustomer?.currentGasOnHand || 0}
+                      disabled={loading.submitting}
+                    />
+                    <small className="text-muted">Max: {selectedCustomer?.currentGasOnHand || 0}</small>
+                  </div>
+                </div>
+                
+                <div className="row mb-3">
+                  <div className="col-md-4">
+                    <label className="form-label">Today's Credit (₹)</label>
+                    <input
+                      type="number"
+                      className="form-control"
+                      value={formData.todayCredit}
+                      readOnly
+                    />
+                  </div>
+                  
+                  <div className="col-md-4">
+                    <label className="form-label">Previous Balance (₹)</label>
+                    <input
+                      type="number"
+                      className="form-control"
+                      value={formData.previousBalance}
+                      readOnly
+                    />
+                  </div>
+                  
+                  <div className="col-md-4">
+                    <label className="form-label">Amount Received (₹)</label>
+                    <input
+                      type="number"
+                      className="form-control"
+                      name="totalAmountReceived"
+                      value={formData.totalAmountReceived}
+                      onChange={handleChange}
+                      required
+                      min="0"
+                      disabled={loading.submitting}
+                    />
+                  </div>
+                </div>
+                
+                <div className="row mb-3">
+                  <div className="col-md-6">
+                    <label className="form-label">New Balance (₹)</label>
+                    <input
+                      type="number"
+                      className="form-control"
+                      value={formData.totalBalance}
+                      readOnly
+                    />
+                  </div>
+                  
+                  <div className="col-md-6">
+                    <label className="form-label">New Cylinder Count</label>
+                    <input
+                      type="number"
+                      className="form-control"
+                      value={
+                        selectedCustomer 
+                          ? (selectedCustomer.currentGasOnHand || 0) - formData.emptyQuantity + formData.salesQuantity
+                          : 0
+                      }
+                      readOnly
+                    />
+                  </div>
+                </div>
+              </>
+            )}
+            
+            <div className="d-grid gap-2 mt-4">
+              <button 
+                type="submit" 
+                className="btn btn-primary btn-lg mb-5"
+                disabled={loading.submitting || !selectedCustomer || !selectedProduct}
+              >
+                {loading.submitting ? (
+                  <>
+                    <span className="spinner-border spinner-border-sm me-2" role="status" aria-hidden="true"></span>
+                    Processing...
+                  </>
+                ) : "Record Sale"}
+              </button>
+            </div>
+          </form>
         </div>
-        
-        <div className="form-group">
-          <label>Route:</label>
-          <input
-            type="text"
-            value={routeName}
-            readOnly
-          />
-        </div>
-        
-        <div className="form-group">
-          <label>Customer:</label>
-          <select
-            name="customerId"
-            value={formData.customerId}
-            onChange={handleChange}
-            required
-            disabled={loading.submitting}
-          >
-            <option value="">Select Customer</option>
-            {customers.map(customer => (
-              <option key={customer.id} value={customer.id}>
-                {customer.name} ({customer.phone}) - 
-                Balance: ₹{customer.currentBalance || 0} - 
-                Cylinders: {customer.currentGasOnHand || 0}
-              </option>
-            ))}
-          </select>
-        </div>
-        
-        {selectedCustomer && (
-          <div className="customer-details">
-            <p><strong>Current Balance:</strong> ₹{selectedCustomer.currentBalance || 0}</p>
-            <p><strong>Cylinders On Hand:</strong> {selectedCustomer.currentGasOnHand || 0}</p>
-            <p><strong>Address:</strong> {selectedCustomer.address}</p>
-          </div>
-        )}
-        
-        <div className="form-group">
-          <label>Product:</label>
-          <select
-            name="productId"
-            value={formData.productId}
-            onChange={handleChange}
-            required
-            disabled={loading.submitting}
-          >
-            <option value="">Select Product</option>
-            {products.map(product => (
-              <option key={product.id} value={product.id}>
-                {product.name} (₹{product.price})
-              </option>
-            ))}
-          </select>
-        </div>
-        
-        {selectedProduct && (
-          <>
-            <div className="form-group">
-              <label>Product Price:</label>
-              <input
-                type="number"
-                value={selectedProduct.price}
-                readOnly
-              />
-            </div>
-            
-            <div className="form-group">
-              <label>Sales Quantity:</label>
-              <input
-                type="number"
-                name="salesQuantity"
-                value={formData.salesQuantity}
-                onChange={handleChange}
-                required
-                min="1"
-                disabled={loading.submitting}
-              />
-            </div>
-            
-            <div className="form-group">
-              <label>Empty Cylinders Returned:</label>
-              <input
-                type="number"
-                name="emptyQuantity"
-                value={formData.emptyQuantity}
-                onChange={handleChange}
-                required
-                min="0"
-                max={selectedCustomer?.currentGasOnHand || 0}
-                disabled={loading.submitting}
-              />
-              <small>Max: {selectedCustomer?.currentGasOnHand || 0}</small>
-            </div>
-            
-            <div className="form-group">
-              <label>Today's Credit:</label>
-              <input
-                type="number"
-                value={formData.todayCredit}
-                readOnly
-              />
-            </div>
-            
-            <div className="form-group">
-              <label>Previous Balance:</label>
-              <input
-                type="number"
-                value={formData.previousBalance}
-                readOnly
-              />
-            </div>
-            
-            <div className="form-group">
-              <label>Amount Received (₹):</label>
-              <input
-                type="number"
-                name="totalAmountReceived"
-                value={formData.totalAmountReceived}
-                onChange={handleChange}
-                required
-                min="0"
-                disabled={loading.submitting}
-              />
-            </div>
-            
-            <div className="form-group">
-              <label>New Balance:</label>
-              <input
-                type="number"
-                value={formData.totalBalance}
-                readOnly
-              />
-            </div>
-            
-            <div className="form-group">
-              <label>New Cylinder Count:</label>
-              <input
-                type="number"
-                value={
-                  selectedCustomer 
-                    ? (selectedCustomer.currentGasOnHand || 0) - formData.emptyQuantity + formData.salesQuantity
-                    : 0
-                }
-                readOnly
-              />
-            </div>
-          </>
-        )}
-        
-        <button 
-          type="submit" 
-          className="submit-btn" 
-          disabled={loading.submitting}
-        >
-          {loading.submitting ? "Processing..." : "Record Sale"}
-        </button>
-      </form>
+      </div>
     </div>
   );
 };

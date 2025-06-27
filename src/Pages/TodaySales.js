@@ -2,99 +2,20 @@ import React, { useState, useEffect } from "react";
 import { collection, query, where, getDocs } from "firebase/firestore";
 import { db } from "../Firebase/config";
 import { useNavigate } from "react-router-dom";
-// import "./SalesReports.css";
+import "./SalesReports.css";
+import { FiSearch } from "react-icons/fi";
 
 const SalesReports = () => {
   const routeName = localStorage.getItem("routeName");
   const [sales, setSales] = useState([]);
+  const [filteredSales, setFilteredSales] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
+  const [searchTerm, setSearchTerm] = useState("");
   const [isIndexBuilding, setIsIndexBuilding] = useState(false);
-  const [selectedSale, setSelectedSale] = useState(null);
-  const [showDetailsModal, setShowDetailsModal] = useState(false);
   const navigate = useNavigate();
 
-  useEffect(() => {
-    const fetchSales = async () => {
-      try {
-        if (!routeName) {
-          throw new Error("Route information not found. Please login again.");
-        }
-
-        setLoading(true);
-        setError(null);
-        setIsIndexBuilding(false);
-
-        // Get today's date
-        const today = new Date();
-        const todayDateString = today.toISOString().split('T')[0];
-        const startDate = new Date(todayDateString);
-        const endDate = new Date(todayDateString);
-        endDate.setDate(endDate.getDate() + 1);
-
-        // Query sales - try with timestamp first
-        let salesQuery;
-        try {
-          salesQuery = query(
-            collection(db, "sales"),
-            where("routeName", "==", routeName),
-            where("timestamp", ">=", startDate),
-            where("timestamp", "<", endDate)
-          );
-          
-          const querySnapshot = await getDocs(salesQuery);
-          const salesData = querySnapshot.docs.map(doc => ({
-            id: doc.id,
-            ...doc.data(),
-            timestamp: doc.data().timestamp?.toDate() || new Date()
-          }));
-
-          // Sort sales by timestamp (newest first)
-          salesData.sort((a, b) => b.timestamp - a.timestamp);
-          setSales(salesData);
-        } catch (err) {
-          if (err.code === 'failed-precondition') {
-            // Index might not be ready yet, fallback to simpler query
-            setIsIndexBuilding(true);
-            const fallbackQuery = query(
-              collection(db, "sales"),
-              where("routeName", "==", routeName)
-            );
-            
-            const fallbackSnapshot = await getDocs(fallbackQuery);
-            const fallbackData = fallbackSnapshot.docs.map(doc => ({
-              id: doc.id,
-              ...doc.data(),
-              timestamp: doc.data().timestamp?.toDate() || new Date()
-            }));
-
-            // Filter by date manually
-            const filteredData = fallbackData.filter(sale => {
-              return sale.timestamp >= startDate && sale.timestamp < endDate;
-            });
-
-            filteredData.sort((a, b) => b.timestamp - a.timestamp);
-            setSales(filteredData);
-          } else {
-            throw err;
-          }
-        }
-      } catch (err) {
-        console.error("Error fetching sales:", err);
-        setError(err.message);
-      } finally {
-        setLoading(false);
-      }
-    };
-
-    fetchSales();
-  }, [routeName]);
-
-  const handleRowClick = (sale) => {
-    setSelectedSale(sale);
-    setShowDetailsModal(true);
-  };
-
+  // Formatting functions
   const formatCurrency = (amount) => {
     return new Intl.NumberFormat('en-IN', {
       style: 'currency',
@@ -103,43 +24,117 @@ const SalesReports = () => {
     }).format(amount || 0);
   };
 
-  const formatDate = (date) => {
+  const formatTime = (date) => {
     if (!date) return 'N/A';
-    return new Date(date).toLocaleString('en-IN', {
-      day: 'numeric',
-      month: 'long',
-      year: 'numeric',
+    return new Date(date).toLocaleTimeString('en-IN', {
       hour: '2-digit',
       minute: '2-digit',
       hour12: true
     });
   };
 
-  const renderField = (label, value) => {
-    return (
-      <div className="detail-field">
-        <span className="detail-label">{label}:</span>
-        <span className="detail-value">{value || 'N/A'}</span>
-      </div>
-    );
+  const formatPhoneNumber = (phone) => {
+    if (!phone) return 'N/A';
+    const cleaned = `${phone}`.replace(/\D/g, '');
+    if (cleaned.length === 10) {
+      return `${cleaned.slice(0, 5)} ${cleaned.slice(5)}`;
+    }
+    return phone;
   };
 
-  const renderObjectFields = (obj, prefix = '') => {
-    if (!obj) return null;
-    
-    return Object.entries(obj).map(([key, value]) => {
-      if (typeof value === 'object' && value !== null) {
-        return (
-          <div key={prefix + key} className="nested-section">
-            <h4>{key}</h4>
-            {renderObjectFields(value, `${prefix}${key}.`)}
-          </div>
-        );
+  const fetchSales = async () => {
+    try {
+      if (!routeName) {
+        throw new Error("Route information not found. Please login again.");
       }
+
+      setLoading(true);
+      setError(null);
+      setIsIndexBuilding(false);
+
+      // Calculate date range
+      const today = new Date();
+      today.setHours(0, 0, 0, 0);
+      const tomorrow = new Date(today);
+      tomorrow.setDate(tomorrow.getDate() + 1);
+
+      // Try with indexed query first
+      let salesQuery;
+      let salesData = [];
       
-      const formattedValue = value instanceof Date ? formatDate(value) : value;
-      return renderField(key, formattedValue);
-    });
+      try {
+        salesQuery = query(
+          collection(db, "sales"),
+          where("routeName", "==", routeName),
+          where("timestamp", ">=", today),
+          where("timestamp", "<", tomorrow)
+        );
+        
+        const querySnapshot = await getDocs(salesQuery);
+        salesData = querySnapshot.docs.map(doc => ({
+          id: doc.id,
+          ...doc.data(),
+          timestamp: doc.data().timestamp?.toDate() || new Date()
+        }));
+      } catch (err) {
+        if (err.code === 'failed-precondition') {
+          // Index is building, fallback to client-side filtering
+          setIsIndexBuilding(true);
+          
+          const fallbackQuery = query(
+            collection(db, "sales"),
+            where("routeName", "==", routeName)
+          );
+          
+          const fallbackSnapshot = await getDocs(fallbackQuery);
+          salesData = fallbackSnapshot.docs.map(doc => ({
+            id: doc.id,
+            ...doc.data(),
+            timestamp: doc.data().timestamp?.toDate() || new Date()
+          }));
+          
+          // Filter by date manually
+          salesData = salesData.filter(sale => {
+            return sale.timestamp >= today && sale.timestamp < tomorrow;
+          });
+        } else {
+          throw err;
+        }
+      }
+
+      salesData.sort((a, b) => b.timestamp - a.timestamp);
+      setSales(salesData);
+      setFilteredSales(salesData);
+    } catch (err) {
+      console.error("Error fetching sales:", err);
+      setError(err.message);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    fetchSales();
+  }, [routeName]);
+
+  useEffect(() => {
+    if (searchTerm.trim() === "") {
+      setFilteredSales(sales);
+    } else {
+      const term = searchTerm.toLowerCase();
+      const filtered = sales.filter(sale => 
+        (sale.customerData?.name?.toLowerCase().includes(term)) ||
+        (sale.customerData?.phone?.includes(term)) ||
+        (sale.customerData?.ownerName?.toLowerCase().includes(term)) ||
+        (sale.productData?.name?.toLowerCase().includes(term))
+      );
+      setFilteredSales(filtered);
+    }
+  }, [searchTerm, sales]);
+
+  const handleCardClick = (docId) => {
+    const sale = sales.find(s => s.id === docId);
+    navigate(`/sales/${docId}`, { state: { sale } });
   };
 
   if (!routeName) {
@@ -147,10 +142,7 @@ const SalesReports = () => {
       <div className="error-container">
         <h2>Route Information Missing</h2>
         <p>Please login again to access sales reports.</p>
-        <button 
-          className="retry-button"
-          onClick={() => navigate('/login')}
-        >
+        <button onClick={() => navigate('/login')}>
           Go to Login
         </button>
       </div>
@@ -170,151 +162,84 @@ const SalesReports = () => {
     return (
       <div className="error-container">
         <h2>Error Loading Data</h2>
-        <p className="error-message">{error}</p>
-        <button 
-          className="retry-button"
-          onClick={() => window.location.reload()}
-        >
-          Try Again
-        </button>
+        <p>{error}</p>
+        {error.includes("index") && (
+          <p>The query requires an index. Please try again later.</p>
+        )}
       </div>
     );
   }
 
   return (
     <div className="sales-reports-container">
-      <div className="header">
-        <h2>Today's Sales Report</h2>
-        <p className="route-name">Route: {routeName}</p>
-        {isIndexBuilding && (
-          <div className="index-notice">
-            <p>⏳ Database is optimizing. Full filtering will be available soon.</p>
+      <div className="sales-header">
+        <div>
+          <h1>Today's Sales Report</h1>
+          <p>Route: {routeName}</p>
+        </div>
+      </div>
+
+      {/* Search */}
+      <div className="search-container">
+        <div className="search-input-container">
+          <FiSearch className="search-icon" />
+          <input
+            type="text"
+            placeholder="Search by customer, phone, owner, product..."
+            value={searchTerm}
+            onChange={(e) => setSearchTerm(e.target.value)}
+          />
+        </div>
+      </div>
+
+      {/* Sales Cards */}
+      <div className="sales-cards-container mb-5">
+        {filteredSales.length > 0 ? (
+          <div className="sales-cards-grid">
+            {filteredSales.map((sale) => (
+              <div 
+                key={sale.id} 
+                className="sales-card"
+                onClick={() => handleCardClick(sale.id)}
+              >
+                <div className="card-header">
+                  <span className="card-time">{formatTime(sale.timestamp)}</span>
+                  <span className="card-amount">{formatCurrency(sale.totalAmountReceived)}</span>
+                </div>
+                
+                <div className="card-customer">
+                  <h3>{sale.customerData?.name || 'Unknown'}</h3>
+                  {sale.customerData?.ownerName && (
+                    <p className="card-owner">{sale.customerData.ownerName}</p>
+                  )}
+                  {sale.customerData?.phone && (
+                    <p className="card-phone">{formatPhoneNumber(sale.customerData.phone)}</p>
+                  )}
+                </div>
+                
+                <div className="card-product">
+                  <div className="product-info">
+                    <span className="product-name">{sale.productData?.name || 'N/A'}</span>
+                    <span className="product-qty">Qty: {sale.salesQuantity}</span>
+                  </div>
+                </div>
+              </div>
+            ))}
+          </div>
+        ) : (
+          <div className="empty-state">
+            <div className="empty-icon">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor">
+                <path d="M9 17v-2m3 2v-4m3 4v-6m2 10H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+              </svg>
+            </div>
+            <h3>No sales found</h3>
+            <p>
+              {searchTerm ? "Try adjusting your search" : "No sales recorded for today"}
+            </p>
           </div>
         )}
       </div>
-      
-      {sales.length > 0 ? (
-        <>
-          <div className="summary-card">
-            <div className="summary-item">
-              <span className="summary-label">Total Sales</span>
-              <span className="summary-value">
-                {formatCurrency(sales.reduce((sum, sale) => sum + (sale.totalAmountReceived || 0), 0))}
-              </span>
-            </div>
-            <div className="summary-item">
-              <span className="summary-label">Total Transactions</span>
-              <span className="summary-value">{sales.length}</span>
-            </div>
-          </div>
-
-          <div className="table-responsive">
-            <table className="sales-table">
-              <thead>
-                <tr>
-                  <th>Time</th>
-                  <th>Customer</th>
-                  <th>Product</th>
-                  <th>Qty</th>
-                  <th>Amount</th>
-                  <th>Status</th>
-                  <th>Actions</th>
-                </tr>
-              </thead>
-              <tbody>
-                {sales.map((sale) => (
-                  <tr key={sale.id}>
-                    <td>{sale.timestamp.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</td>
-                    <td>{sale.customerData?.name || 'Unknown'}</td>
-                    <td>{sale.productData?.name || 'N/A'}</td>
-                    <td>{sale.salesQuantity}</td>
-                    <td>{formatCurrency(sale.totalAmountReceived)}</td>
-                    <td>
-                      <span className={`status-badge ${sale.status?.toLowerCase() || 'completed'}`}>
-                        {sale.status || 'Completed'}
-                      </span>
-                    </td>
-                    <td>
-                      <button 
-                        className="details-button"
-                        onClick={() => handleRowClick(sale)}
-                      >
-                        View Details
-                      </button>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        </>
-      ) : (
-        <div className="no-data">
-          <img src="/images/no-data.svg" alt="No sales" className="no-data-image" />
-          <p className="no-data-message">No sales recorded for today.</p>
-        </div>
-      )}
-
-      {/* Details Modal */}
-      {showDetailsModal && selectedSale && (
-        <div className="modal-overlay">
-          <div className="details-modal">
-            <div className="modal-header">
-              <h3>Sale Details - {selectedSale.id}</h3>
-              <button 
-                className="close-button"
-                onClick={() => setShowDetailsModal(false)}
-              >
-                &times;
-              </button>
-            </div>
-            <div className="modal-content">
-              <div className="details-section">
-                <h4>Basic Information</h4>
-                {renderField('Sale ID', selectedSale.id)}
-                {renderField('Date', formatDate(selectedSale.timestamp))}
-                {renderField('Status', selectedSale.status)}
-                {renderField('Route', selectedSale.routeName)}
-              </div>
-
-              <div className="details-section">
-                <h4>Transaction Details</h4>
-                {renderField('Quantity', selectedSale.salesQuantity)}
-                {renderField('Empty Quantity', selectedSale.emptyQuantity)}
-                {renderField('Total Amount Received', formatCurrency(selectedSale.totalAmountReceived))}
-                {renderField('Today Credit', formatCurrency(selectedSale.todayCredit))}
-              </div>
-
-              <div className="details-section">
-                <h4>Customer Information</h4>
-                {renderObjectFields(selectedSale.customerData)}
-                {renderField('Address', selectedSale.customerAddress)}
-              </div>
-
-              <div className="details-section">
-                <h4>Product Information</h4>
-                {renderObjectFields(selectedSale.productData)}
-              </div>
-
-              <div className="details-section">
-                <h4>Balance Information</h4>
-                {renderField('Previous Balance', formatCurrency(selectedSale.previousBalance))}
-                {renderField('Current Balance', formatCurrency(selectedSale.customerData?.currentBalance))}
-                {renderField('Total Balance', formatCurrency(selectedSale.totalBalance))}
-                {renderField('Current Gas On Hand', selectedSale.customerData?.currentGasOnHand)}
-              </div>
-            </div>
-            <div className="modal-footer">
-              <button 
-                className="close-button"
-                onClick={() => setShowDetailsModal(false)}
-              >
-                Close
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
     </div>
   );
 };

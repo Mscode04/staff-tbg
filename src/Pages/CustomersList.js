@@ -7,33 +7,40 @@ import {
   Button, 
   CircularProgress, 
   Container, 
-  Paper, 
-  Table, 
-  TableBody, 
-  TableCell, 
-  TableContainer, 
-  TableHead, 
-  TableRow, 
+  Grid,
+  TextField,
   Typography,
+  Card,
+  CardContent,
+  CardActions,
   Chip,
-  Alert
+  Alert,
+  InputAdornment,
+  useTheme,
+  useMediaQuery
 } from "@mui/material";
+import SearchIcon from '@mui/icons-material/Search';
 
 const AllCustomersList = () => {
   const [customers, setCustomers] = useState([]);
+  const [filteredCustomers, setFilteredCustomers] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
+  const [searchTerm, setSearchTerm] = useState("");
   const navigate = useNavigate();
+  const theme = useTheme();
+  const isMobile = useMediaQuery(theme.breakpoints.down('sm'));
 
   useEffect(() => {
     const fetchCustomers = async () => {
       try {
         const querySnapshot = await getDocs(collection(db, "customers"));
         const customersData = querySnapshot.docs.map(doc => ({
-          firebaseId: doc.id, // Using Firebase document ID as the primary identifier
+          firebaseId: doc.id,
           ...doc.data()
         }));
         setCustomers(customersData);
+        setFilteredCustomers(customersData);
       } catch (err) {
         console.error("Error fetching customers:", err);
         setError("Failed to load customers. Please try again later.");
@@ -44,6 +51,17 @@ const AllCustomersList = () => {
 
     fetchCustomers();
   }, []);
+
+  useEffect(() => {
+    if (searchTerm.trim() === "") {
+      setFilteredCustomers(customers);
+    } else {
+      const filtered = customers.filter(customer => 
+        customer.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
+        (customer.phone && customer.phone.includes(searchTerm)))
+      setFilteredCustomers(filtered);
+    }
+  }, [searchTerm, customers]);
 
   if (loading) {
     return (
@@ -65,61 +83,124 @@ const AllCustomersList = () => {
     <Container maxWidth="xl" sx={{ py: 4 }}>
       <Box sx={{ 
         display: 'flex', 
+        flexDirection: isMobile ? 'column' : 'row',
         justifyContent: 'space-between', 
-        alignItems: 'center', 
+        alignItems: isMobile ? 'flex-start' : 'center',
+        gap: isMobile ? 2 : 0,
         mb: 4 
       }}>
         <Typography variant="h4" component="h1">
           All Customers
         </Typography>
-        <Button 
-          variant="contained"
-          onClick={() => navigate("/customers/new")}
-          sx={{ ml: 2 }}
-        >
-          Add New Customer
-        </Button>
+        
+        <Box sx={{ 
+          display: 'flex', 
+          flexDirection: isMobile ? 'column' : 'row',
+          gap: 2,
+          width: isMobile ? '100%' : 'auto'
+        }}>
+          <TextField
+            variant="outlined"
+            size="small"
+            placeholder="Search by name or phone"
+            value={searchTerm}
+            onChange={(e) => setSearchTerm(e.target.value)}
+            InputProps={{
+              startAdornment: (
+                <InputAdornment position="start">
+                  <SearchIcon />
+                </InputAdornment>
+              ),
+            }}
+            sx={{
+              width: isMobile ? '100%' : 300,
+            }}
+          />
+     
+        </Box>
       </Box>
 
-      <TableContainer component={Paper} elevation={3}>
-        <Table sx={{ minWidth: 650 }} aria-label="customers table">
-          <TableHead sx={{ bgcolor: 'primary.main' }}>
-            <TableRow>
-              <TableCell sx={{ color: 'white' }}>Name</TableCell>
-              <TableCell sx={{ color: 'white' }}>Route</TableCell>
-              <TableCell sx={{ color: 'white' }}>Phone</TableCell>
-              <TableCell sx={{ color: 'white' }}>Balance</TableCell>
-              <TableCell sx={{ color: 'white' }}>Gas On Hand</TableCell>
-              <TableCell sx={{ color: 'white' }}>Actions</TableCell>
-            </TableRow>
-          </TableHead>
-          <TableBody>
-            {customers.map((customer) => (
-              <TableRow key={customer.firebaseId}>
-                <TableCell>{customer.name}</TableCell>
-                <TableCell>{customer.route || '-'}</TableCell>
-                <TableCell>{customer.phone}</TableCell>
-                <TableCell>
-                  <Chip 
-                    label={`₹${customer.currentBalance?.toLocaleString('en-IN') || '0'}`}
-                    color={customer.currentBalance > 0 ? 'error' : 'default'}
-                  />
-                </TableCell>
-                <TableCell>{customer.currentGasOnHand || '0'}</TableCell>
-                <TableCell>
-                  <Button 
-                    variant="outlined"
-                    size="small"
-                    onClick={() => navigate(`/customer/${customer.firebaseId}`)} // Using Firebase document ID
-                  >
-                    View
-                  </Button>
-                </TableCell>
-              </TableRow>
-            ))}
-          </TableBody>
-        </Table>
-      </TableContainer>
+      {filteredCustomers.length === 0 ? (
+        <Box sx={{ 
+          display: 'flex', 
+          justifyContent: 'center', 
+          alignItems: 'center', 
+          minHeight: '200px',
+          textAlign: 'center'
+        }}>
+          <Typography variant="h6" color="textSecondary">
+            {searchTerm ? 'No customers match your search' : 'No customers found'}
+          </Typography>
+        </Box>
+      ) : (
+        <Grid container spacing={3}>
+          {filteredCustomers.map((customer) => (
+            <Grid item xs={12} sm={6} md={4} lg={3} key={customer.firebaseId}>
+              <Card 
+               className="rounded-3"
+                sx={{ 
+                  height: '100%', 
+                  display: 'flex', 
+                  flexDirection: 'column',
+                  transition: 'transform 0.2s, box-shadow 0.2s',
+                  '&:hover': {
+                    transform: 'translateY(-4px)',
+                    boxShadow: theme.shadows[6]
+                  }
+                }}
+              >
+                <CardContent sx={{ flexGrow: 1 }} onClick={() => navigate(`/customer/${customer.firebaseId}`)} className="rounded-3">
+                  <Typography variant="h6" component="div" gutterBottom>
+                    {customer.name}
+                  </Typography>
+                  
+                  <Box sx={{ mb: 1.5 }}>
+                    <Typography variant="body2" color="text.secondary">
+                      <strong>Phone:</strong> {customer.phone || '-'}
+                    </Typography>
+                    <Typography variant="body2" color="text.secondary">
+                      <strong>Route:</strong> {customer.route || '-'}
+                    </Typography>
+                  </Box>
+                  
+                  <Box sx={{ 
+                    display: 'flex', 
+                    justifyContent: 'space-between',
+                    alignItems: 'center',
+                    gap: 1,
+                    mb: 1
+                  }}>
+                    <Typography variant="body2">
+                      <strong>Balance:</strong>
+                    </Typography>
+                    <Chip 
+                      label={`₹${customer.currentBalance?.toLocaleString('en-IN') || '0'}`}
+                      color={customer.currentBalance > 0 ? 'error' : 'default'}
+                      size="small"
+                    />
+                  </Box>
+                  
+                  <Box sx={{ 
+                    display: 'flex', 
+                    justifyContent: 'space-between',
+                    alignItems: 'center',
+                    gap: 1
+                  }}>
+                    <Typography variant="body2">
+                      <strong>Gas On Hand:</strong>
+                    </Typography>
+                    <Chip 
+                      label={customer.currentGasOnHand || '0'}
+                      color="info"
+                      size="small"
+                    />
+                  </Box>
+                </CardContent>
+              </Card>
+            </Grid>
+          ))}
+        </Grid>
+      )}
     </Container>
   );
 };

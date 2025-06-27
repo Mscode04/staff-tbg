@@ -4,34 +4,45 @@ import { db } from "../Firebase/config";
 import { doc, getDoc, collection, query, where, getDocs } from "firebase/firestore";
 import { 
   Typography, 
-  Paper, 
   Box, 
   Button, 
   CircularProgress, 
-  Table,
-  TableBody,
-  TableCell,
-  TableContainer,
-  TableHead,
-  TableRow,
-  List,
-  ListItem,
-  ListItemText,
-  Divider,
   Chip,
   Alert,
   Container,
-  Grid
+  Grid,
+  Card,
+  CardContent,
+  Divider,
+  Avatar,
+  List,
+  ListItem,
+  ListItemAvatar,
+  ListItemText,
+  Paper,
+  useTheme,
+  useMediaQuery
 } from "@mui/material";
-import { format } from 'date-fns';
+import {
+  Phone as PhoneIcon,
+  Home as HomeIcon,
+  Directions as RouteIcon,
+  AttachMoney as BalanceIcon,
+  LocalGasStation as GasIcon,
+  ArrowBack as BackIcon
+} from "@mui/icons-material";
 
 const CustomerProfile = () => {
-  const { id } = useParams(); // This is the Firebase document ID
+  const { id } = useParams();
   const navigate = useNavigate();
+  const routeName = localStorage.getItem("routeName");
   const [customer, setCustomer] = useState(null);
   const [sales, setSales] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
+  const theme = useTheme();
+  const isMobile = useMediaQuery(theme.breakpoints.down('sm'));
+  const isTablet = useMediaQuery(theme.breakpoints.between('sm', 'md'));
 
   useEffect(() => {
     const fetchCustomerData = async () => {
@@ -45,7 +56,7 @@ const CustomerProfile = () => {
         }
         
         const customerData = {
-          firebaseId: customerDoc.id, // Storing the document ID explicitly
+          firebaseId: customerDoc.id,
           ...customerDoc.data()
         };
         setCustomer(customerData);
@@ -83,164 +94,194 @@ const CustomerProfile = () => {
   if (error) {
     return (
       <Container maxWidth="md" sx={{ mt: 3 }}>
-        <Alert severity="error">{error}</Alert>
+        <Alert severity="error" sx={{ mb: 2 }}>{error}</Alert>
         <Button 
           variant="outlined" 
-          sx={{ mt: 2 }}
+          startIcon={<BackIcon />}
           onClick={() => navigate(-1)}
+          fullWidth={isMobile}
         >
-          Go Back
+          Back
         </Button>
       </Container>
     );
   }
 
   return (
-    <Container maxWidth="xl" sx={{ py: 4 }}>
-      <Button 
+    <Container maxWidth="xl" sx={{ py: isMobile ? 2 : 4 }}>
+      {/* <Button 
         variant="outlined"
+        startIcon={<BackIcon />}
         onClick={() => navigate(-1)}
         sx={{ mb: 3 }}
+        fullWidth={isMobile}
       >
-        Back to Customers
-      </Button>
+        Back
+      </Button> */}
       
-      <Paper elevation={3} sx={{ p: 4, mb: 4 }}>
-        <Grid container spacing={3}>
-          <Grid item xs={12} md={8}>
-            <Typography variant="h3" gutterBottom>
-              {customer.name}'s Profile
-            </Typography>
-            
-            <List>
-              <ListItem>
-                <ListItemText 
-                  primary="Firebase Document ID" 
-                  secondary={customer.firebaseId} 
-                />
-              </ListItem>
-              <Divider />
-              <ListItem>
-                <ListItemText primary="Phone" secondary={customer.phone} />
-              </ListItem>
-              <Divider />
-              <ListItem>
-                <ListItemText primary="Address" secondary={customer.address} />
-              </ListItem>
-              <Divider />
-              <ListItem>
-                <ListItemText primary="Route" secondary={customer.route || 'N/A'} />
-              </ListItem>
-            </List>
-          </Grid>
-          
-          <Grid item xs={12} md={4}>
-            <Paper elevation={2} sx={{ p: 3, backgroundColor: 'background.paper' }}>
-              <Typography variant="h6" gutterBottom>
-                Account Summary
+      {/* Main Customer Card */}
+      <Card elevation={3} sx={{ mb: 4 }} className="rounded-3 p-2">
+        <CardContent>
+          <Box sx={{ 
+            display: 'flex', 
+            alignItems: 'center', 
+            mb: 3,
+            flexDirection: isMobile ? 'column' : 'row',
+            textAlign: isMobile ? 'center' : 'left'
+          }}>
+            <Avatar 
+              sx={{ 
+                bgcolor: theme.palette.primary.main,
+                width: isMobile ? 60 : 80,
+                height: isMobile ? 60 : 80,
+                fontSize: isMobile ? '2rem' : '2.5rem',
+                mb: isMobile ? 2 : 0,
+                mr: isMobile ? 0 : 3
+              }}
+            >
+              {customer.name.charAt(0)}
+            </Avatar>
+            <Box>
+              <Typography variant="h4" component="h1" gutterBottom>
+                {customer.name}
               </Typography>
-              <List>
-                <ListItem>
-                  <ListItemText 
-                    primary="Current Balance" 
-                    secondary={
-                      <Chip 
-                        label={`₹${customer.currentBalance?.toLocaleString('en-IN') || '0'}`}
-                        color={customer.currentBalance > 0 ? 'error' : 'success'}
-                        size="medium"
-                      />
-                    } 
-                  />
-                </ListItem>
-                <Divider />
-                <ListItem>
-                  <ListItemText 
-                    primary="Gas On Hand" 
-                    secondary={
-                      <Chip 
-                        label={customer.currentGasOnHand || '0'}
-                        color="primary"
-                        size="medium"
-                      />
-                    } 
-                  />
-                </ListItem>
-              </List>
-            </Paper>
-          </Grid>
-        </Grid>
-        
-        <Box sx={{ display: 'flex', gap: 2, mt: 4 }}>
-          <Button 
-            variant="contained"
-            onClick={() => navigate(`/customers/edit/${customer.firebaseId}`)}
-          >
-            Edit Profile
-          </Button>
-          <Button 
-            variant="contained"
-            color="success"
-            onClick={() => navigate(`/sales/new?customerId=${customer.firebaseId}`)}
-          >
-            New Sale
-          </Button>
-          <Button 
-            variant="contained"
-            color="secondary"
-            onClick={() => navigate(`/payments/new?customerId=${customer.firebaseId}`)}
-          >
-            Record Payment
-          </Button>
-        </Box>
-      </Paper>
-      
-      <Typography variant="h4" gutterBottom sx={{ mb: 3 }}>
-        Transaction History
-      </Typography>
-      
-      <TableContainer component={Paper} elevation={3}>
-        <Table sx={{ minWidth: 650 }} aria-label="sales history">
-          <TableHead sx={{ bgcolor: 'primary.main' }}>
-            <TableRow>
-              <TableCell sx={{ color: 'white' }}>Date</TableCell>
-              <TableCell sx={{ color: 'white' }}>Type</TableCell>
-              <TableCell sx={{ color: 'white' }}>Details</TableCell>
-              <TableCell sx={{ color: 'white' }}>Quantity</TableCell>
-              <TableCell sx={{ color: 'white' }}>Amount</TableCell>
-              <TableCell sx={{ color: 'white' }}>Received</TableCell>
-              <TableCell sx={{ color: 'white' }}>Balance</TableCell>
-            </TableRow>
-          </TableHead>
-          <TableBody>
-            {sales.length > 0 ? (
-              sales.map(sale => (
-                <TableRow key={sale.id}>
-                  <TableCell>
-                    {sale.timestamp?.toDate ? format(sale.timestamp.toDate(), 'dd MMM yyyy') : 'N/A'}
-                  </TableCell>
-                  <TableCell>Sale</TableCell>
-                  <TableCell>{sale.productName || 'Gas Cylinder'}</TableCell>
-                  <TableCell>{sale.salesQuantity}</TableCell>
-                  <TableCell>₹{sale.todayCredit?.toLocaleString('en-IN') || '0'}</TableCell>
-                  <TableCell>₹{sale.totalAmountReceived?.toLocaleString('en-IN') || '0'}</TableCell>
-                  <TableCell>
-                    <Chip 
-                      label={`₹${sale.totalBalance?.toLocaleString('en-IN') || '0'}`}
-                      color={sale.totalBalance > 0 ? 'error' : 'success'}
+              <Chip 
+                label={routeName || 'No Route Assigned'}
+                color="secondary"
+                size="small"
+                icon={<RouteIcon />}
+                sx={{ mb: isMobile ? 1 : 0 }}
+              />
+            </Box>
+          </Box>
+
+          <Grid container spacing={3}>
+            {/* Customer Details */}
+            <Grid item xs={12} md={6}>
+              <Paper elevation={0} sx={{ 
+                p: 2, 
+                backgroundColor: 'background.default',
+                borderRadius: 2
+              }}>
+                <Typography variant="h6" gutterBottom sx={{ 
+                  display: 'flex', 
+                  alignItems: 'center',
+                  color: 'text.secondary'
+                }}>
+                  Customer Details
+                </Typography>
+                <Divider sx={{ mb: 2 }} />
+                
+                <List dense>
+                  <ListItem sx={{ px: 0 }}>
+                    <ListItemAvatar>
+                      <Avatar sx={{ 
+                        bgcolor: 'primary.light',
+                        width: 32, 
+                        height: 32 
+                      }}>
+                        <PhoneIcon fontSize="small" />
+                      </Avatar>
+                    </ListItemAvatar>
+                    <ListItemText 
+                      primary="Phone Number" 
+                      secondary={customer.phone || 'Not provided'} 
+                      secondaryTypographyProps={{ 
+                        color: customer.phone ? 'text.primary' : 'text.secondary'
+                      }}
                     />
-                  </TableCell>
-                </TableRow>
-              ))
-            ) : (
-              <TableRow>
-                <TableCell colSpan={7} align="center">
-                  No transactions found
-                </TableCell>
-              </TableRow>
-            )}
-          </TableBody>
-        </Table>
-      </TableContainer>
+                  </ListItem>
+                  
+                  <ListItem sx={{ px: 0 }}>
+                    <ListItemAvatar>
+                      <Avatar sx={{ 
+                        bgcolor: 'primary.light',
+                        width: 32, 
+                        height: 32 
+                      }}>
+                        <HomeIcon fontSize="small" />
+                      </Avatar>
+                    </ListItemAvatar>
+                    <ListItemText 
+                      primary="Address" 
+                      secondary={customer.address || 'Not provided'} 
+                      secondaryTypographyProps={{ 
+                        color: customer.address ? 'text.primary' : 'text.secondary'
+                      }}
+                    />
+                  </ListItem>
+                </List>
+              </Paper>
+            </Grid>
+            
+            {/* Account Summary */}
+            <Grid item xs={12} md={6}>
+              <Paper elevation={0} sx={{ 
+                p: 2, 
+                backgroundColor: 'background.default',
+                borderRadius: 2
+              }}>
+                <Typography variant="h6" gutterBottom sx={{ 
+                  display: 'flex', 
+                  alignItems: 'center',
+                  color: 'text.secondary'
+                }}>
+                  Account Summary
+                </Typography>
+                <Divider sx={{ mb: 2 }} />
+                
+                <List dense>
+                  <ListItem sx={{ px: 0 }}>
+                    <ListItemAvatar>
+                      <Avatar sx={{ 
+                        bgcolor: customer.currentBalance > 0 ? 'error.light' : 'success.light',
+                        width: 32, 
+                        height: 32 
+                      }}>
+                        <BalanceIcon fontSize="small" />
+                      </Avatar>
+                    </ListItemAvatar>
+                    <ListItemText 
+                      primary="Current Balance" 
+                      secondary={
+                        <Chip 
+                          label={`₹${customer.currentBalance?.toLocaleString('en-IN') || '0'}`}
+                          color={customer.currentBalance > 0 ? 'error' : 'success'}
+                          size={isMobile ? 'small' : 'medium'}
+                          variant="outlined"
+                        />
+                      } 
+                    />
+                  </ListItem>
+                  
+                  <ListItem sx={{ px: 0 }}>
+                    <ListItemAvatar>
+                      <Avatar sx={{ 
+                        bgcolor: 'info.light',
+                        width: 32, 
+                        height: 32 
+                      }}>
+                        <GasIcon fontSize="small" />
+                      </Avatar>
+                    </ListItemAvatar>
+                    <ListItemText 
+                      primary="Gas On Hand" 
+                      secondary={
+                        <Chip 
+                          label={customer.currentGasOnHand || '0'}
+                          color="info"
+                          size={isMobile ? 'small' : 'medium'}
+                          variant="outlined"
+                        />
+                      } 
+                    />
+                  </ListItem>
+                </List>
+              </Paper>
+            </Grid>
+          </Grid>
+        </CardContent>
+      </Card>
     </Container>
   );
 };

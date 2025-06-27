@@ -1,5 +1,5 @@
 import React, { useState } from "react";
-import { BrowserRouter as Router, Routes, Route, Navigate } from "react-router-dom";
+import {  Routes, Route, Navigate } from "react-router-dom";
 import LoginPage from "./Main/LoginPage";
 import Main from './Main/Main';
 import Dashboard from "./Pages/Dashboard";
@@ -7,7 +7,7 @@ import SalesForm from "./Pages/SalesForm";
 import CustomersList from "./Pages/CustomersList";
 import CustomerProfile from "./Pages/CustomerProfile";
 import TodaySales from "./Pages/TodaySales";
-
+import SalesDetails from "./Pages/SalesReportDetails";
 function App() {
   const [isAuthenticated, setIsAuthenticated] = useState(
     localStorage.getItem("isAuthenticated") === "true"
@@ -29,6 +29,8 @@ function App() {
           <Route path="sales/today/:routeName" element={<TodaySales />} />
           <Route path="customers/:routeName" element={<CustomersList />} />
           <Route path="customer/:id" element={<CustomerProfile />} />
+          <Route path="sales/:id" element={<SalesDetails />} />
+          
         </Route>
 
         <Route path="*" element={

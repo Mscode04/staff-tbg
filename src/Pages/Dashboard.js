@@ -2,35 +2,42 @@ import React, { useState, useEffect } from "react";
 import { db } from "../Firebase/config";
 import { collection, query, where, getDocs } from "firebase/firestore";
 import { 
-  Table, 
   Typography, 
   Box, 
   Paper, 
   CircularProgress,
-  TableHead,
-  TableBody,
-  TableRow,
-  TableCell
+  Grid,
+  Card,
+  CardContent,
+  Divider,
+  Chip,
+  useTheme,
+  useMediaQuery,
+  Button,
+  IconButton
 } from "@mui/material";
 import { format } from 'date-fns';
+import { useNavigate } from "react-router-dom";
+import { FiEye } from "react-icons/fi";
 
 const Dashboard = () => {
   const [todaySales, setTodaySales] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [routeName, setRouteName] = useState("");
+  const navigate = useNavigate();
+  const theme = useTheme();
+  const isMobile = useMediaQuery(theme.breakpoints.down('sm'));
 
   useEffect(() => {
     const fetchTodaySales = async () => {
       try {
-        // Get routeName from localStorage
         const storedRouteName = localStorage.getItem("routeName");
         if (!storedRouteName) {
           throw new Error("Route name not found in localStorage");
         }
         setRouteName(storedRouteName);
 
-        // Get today's date in YYYY-MM-DD format
         const today = new Date();
         const todayDateString = format(today, 'yyyy-MM-dd');
         
@@ -38,14 +45,14 @@ const Dashboard = () => {
         const q = query(
           salesRef,
           where("routeName", "==", storedRouteName),
-          where("date", "==", todayDateString) // Changed from timestamp to date
+          where("date", "==", todayDateString)
         );
         
         const querySnapshot = await getDocs(q);
         const salesData = querySnapshot.docs.map(doc => {
           const data = doc.data();
           return {
-            id: doc.id,
+            id: doc.id, // Firebase document ID
             customerName: data.customerName || "",
             customerPhone: data.customerPhone || "",
             productName: data.productName || "",
@@ -57,7 +64,6 @@ const Dashboard = () => {
             totalBalance: data.totalBalance || 0,
             status: data.status || "completed",
             date: data.date || todayDateString,
-            // If you still need timestamp for display, fallback to current time
             timestamp: data.timestamp?.toDate() || new Date()
           };
         });
@@ -74,7 +80,9 @@ const Dashboard = () => {
     fetchTodaySales();
   }, []);
 
-  // Calculate various totals (unchanged)
+
+
+  // Calculate totals
   const totalSalesQty = todaySales.reduce((sum, sale) => sum + (sale.salesQuantity || 0), 0);
   const totalEmptyQty = todaySales.reduce((sum, sale) => sum + (sale.emptyQuantity || 0), 0);
   const totalCreditAmount = todaySales.reduce((sum, sale) => sum + (sale.todayCredit || 0), 0);
@@ -99,84 +107,145 @@ const Dashboard = () => {
   }
 
   return (
-    <Box sx={{ p: 3 }}>
-      <Typography variant="h4" gutterBottom>
-        Today's Sales 
+    <Box sx={{ p: isMobile ? 1 : 3 }}>
+      <Typography variant="h4" gutterBottom sx={{ fontWeight: 600 }}>
+        Today's Sales
+      </Typography>
+      <Typography variant="subtitle1" color="textSecondary" gutterBottom>
+        Route: {routeName} | {format(new Date(), 'MMMM do, yyyy')}
       </Typography>
       
-      {/* Summary Cards (unchanged) */}
-      <Box sx={{ mb: 4 }}>
-        <Typography variant="h6" gutterBottom>Summary</Typography>
-        <Box display="flex" flexWrap="wrap" gap={2} sx={{ mt: 2 }}>
-          <Paper elevation={3} sx={{ p: 2, flex: 1, minWidth: 200 }}>
-            <Typography variant="subtitle1">Total Sales Count</Typography>
-            <Typography variant="h4">{reportCount}</Typography>
+      {/* Summary Cards */}
+      <Grid container spacing={2} sx={{ mb: 4 }}>
+            <Grid item xs={12} sm={6} md={4} lg={2}>
+          <Paper elevation={3} sx={{ p: 2, height: '100%', borderRadius: 2, borderLeft: `4px solid ${theme.palette.success.main}` }}>
+            <Typography variant="subtitle2" color="textSecondary">Received</Typography>
+            <Typography variant="h4" sx={{ fontWeight: 700 }}>₹{totalAmountReceived.toLocaleString()}</Typography>
           </Paper>
-          <Paper elevation={3} sx={{ p: 2, flex: 1, minWidth: 200 }}>
-            <Typography variant="subtitle1">Total Sales Quantity</Typography>
-            <Typography variant="h4">{totalSalesQty}</Typography>
+        </Grid>
+        <Grid item xs={12} sm={6} md={4} lg={2}>
+          <Paper elevation={3} sx={{ p: 2, height: '100%', borderRadius: 2 }}>
+            <Typography variant="subtitle2" color="textSecondary">Total Sales</Typography>
+            <Typography variant="h4" sx={{ fontWeight: 700 }}>{reportCount}</Typography>
           </Paper>
-          <Paper elevation={3} sx={{ p: 2, flex: 1, minWidth: 200 }}>
-            <Typography variant="subtitle1">Total Empty Quantity</Typography>
-            <Typography variant="h4">{totalEmptyQty}</Typography>
+        </Grid>
+        <Grid item xs={12} sm={6} md={4} lg={2}>
+          <Paper elevation={3} sx={{ p: 2, height: '100%', borderRadius: 2 }}>
+            <Typography variant="subtitle2" color="textSecondary">Sales Qty</Typography>
+            <Typography variant="h4" sx={{ fontWeight: 700 }}>{totalSalesQty}</Typography>
           </Paper>
-          <Paper elevation={3} sx={{ p: 2, flex: 1, minWidth: 200 }}>
-            <Typography variant="subtitle1">Total Credit Amount</Typography>
-            <Typography variant="h4">₹{totalCreditAmount.toLocaleString()}</Typography>
+        </Grid>
+        <Grid item xs={12} sm={6} md={4} lg={2}>
+          <Paper elevation={3} sx={{ p: 2, height: '100%', borderRadius: 2 }}>
+            <Typography variant="subtitle2" color="textSecondary">Empty Qty</Typography>
+            <Typography variant="h4" sx={{ fontWeight: 700 }}>{totalEmptyQty}</Typography>
           </Paper>
-          <Paper elevation={3} sx={{ p: 2, flex: 1, minWidth: 200 }}>
-            <Typography variant="subtitle1">Total Amount Received</Typography>
-            <Typography variant="h4">₹{totalAmountReceived.toLocaleString()}</Typography>
+        </Grid>
+        <Grid item xs={12} sm={6} md={4} lg={2}>
+          <Paper elevation={3} sx={{ p: 2, height: '100%', borderRadius: 2, borderLeft: `4px solid ${theme.palette.warning.main}` }}>
+            <Typography variant="subtitle2" color="textSecondary">Credit</Typography>
+            <Typography variant="h4" sx={{ fontWeight: 700 }}>₹{totalCreditAmount.toLocaleString()}</Typography>
           </Paper>
-        </Box>
-      </Box>
+        </Grid>
+    
+        {/* <Grid item xs={12} sm={6} md={4} lg={2}>
+          <Paper elevation={3} sx={{ p: 2, height: '100%', borderRadius: 2, borderLeft: `4px solid ${theme.palette.error.main}` }}>
+            <Typography variant="subtitle2" color="textSecondary">Balance</Typography>
+            <Typography variant="h4" sx={{ fontWeight: 700 }}>₹{totalBalance.toLocaleString()}</Typography>
+          </Paper>
+        </Grid> */}
+      </Grid>
       
-      {/* Detailed Sales Table (unchanged) */}
-      <Typography variant="h6" gutterBottom sx={{ mt: 4 }}>Detailed Transactions</Typography>
-      <Paper elevation={3} sx={{ overflow: 'hidden' }}>
-        <Table>
-          <TableHead>
-            <TableRow sx={{ backgroundColor: 'primary.main' }}>
-              <TableCell sx={{ color: 'white' }}>Sale ID</TableCell>
-              <TableCell sx={{ color: 'white' }}>Customer</TableCell>
-              <TableCell sx={{ color: 'white' }}>Product</TableCell>
-              <TableCell sx={{ color: 'white' }}>Qty</TableCell>
-              <TableCell sx={{ color: 'white' }}>Empty Qty</TableCell>
-              <TableCell sx={{ color: 'white' }}>Credit</TableCell>
-              <TableCell sx={{ color: 'white' }}>Received</TableCell>
-              <TableCell sx={{ color: 'white' }}>Time</TableCell>
-            </TableRow>
-          </TableHead>
-          <TableBody>
-            {todaySales.map((sale) => (
-              <TableRow key={sale.id} hover>
-                <TableCell>{sale.id.substring(0, 6)}...</TableCell>
-                <TableCell>
-                  <Box>
-                    <Typography>{sale.customerName}</Typography>
-                    <Typography variant="caption" color="textSecondary">
-                      {sale.customerPhone}
+      {/* Sales Cards */}
+      <Typography variant="h6" gutterBottom sx={{ mt: 2, fontWeight: 600 }}>
+        Transaction Records ({todaySales.length})
+      </Typography>
+      
+      {todaySales.length === 0 ? (
+        <Paper elevation={0} sx={{ p: 4, textAlign: 'center', backgroundColor: 'action.hover' }}>
+          <Typography variant="body1">No sales recorded for today</Typography>
+        </Paper>
+      ) : (
+        <Grid container spacing={2} className="mb-5">
+          {todaySales.map((sale) => (
+            <Grid item xs={12} sm={6} md={4} key={sale.id}>
+              <Card 
+                elevation={3} 
+                
+                sx={{ 
+                  borderRadius: 2,
+                  transition: 'transform 0.2s',
+                  '&:hover': {
+                    transform: 'translateY(-4px)',
+                    boxShadow: theme.shadows[6]
+                  }
+                }}
+              >
+                <CardContent  className="cursor-pointer">
+                  <Box display="flex" justifyContent="space-between" alignItems="center" mb={1}>
+                    <Typography variant="subtitle1" sx={{ fontWeight: 600 }}>
+                      {sale.customerName}
                     </Typography>
+                    <Chip 
+                      label={sale.status} 
+                      size="small" 
+                      color={sale.status === 'completed' ? 'success' : 'warning'}
+                    />
                   </Box>
-                </TableCell>
-                <TableCell>
-                  <Box>
-                    <Typography>{sale.productName}</Typography>
-                    <Typography variant="caption" color="textSecondary">
-                      ₹{sale.productPrice}
-                    </Typography>
+                  
+                  <Typography variant="body2" color="textSecondary" gutterBottom>
+                    {sale.customerPhone} • {format(sale.timestamp, 'hh:mm a')}
+                  </Typography>
+                  
+                  <Divider sx={{ my: 1 }} />
+                  
+                  <Grid container spacing={1} sx={{ mt: 1 }}>
+                    <Grid item xs={6}>
+                      <Typography variant="body2" color="textSecondary">Product</Typography>
+                      <Typography variant="body1">{sale.productName}</Typography>
+                    </Grid>
+                    <Grid item xs={6}>
+                      <Typography variant="body2" color="textSecondary">Price</Typography>
+                      <Typography variant="body1">₹{sale.productPrice}</Typography>
+                    </Grid>
+                    <Grid item xs={6}>
+                      <Typography variant="body2" color="textSecondary">Quantity</Typography>
+                      <Typography variant="body1">{sale.salesQuantity}</Typography>
+                    </Grid>
+                    <Grid item xs={6}>
+                      <Typography variant="body2" color="textSecondary">Empty</Typography>
+                      <Typography variant="body1">{sale.emptyQuantity}</Typography>
+                    </Grid>
+                  </Grid>
+                  
+                  <Divider sx={{ my: 1 }} />
+                  
+                  <Box display="flex" justifyContent="space-between" alignItems="center">
+                    <Box>
+                      <Typography variant="body2" color="textSecondary">Received</Typography>
+                      <Typography variant="body1" sx={{ fontWeight: 600 }}>
+                        ₹{sale.totalAmountReceived.toLocaleString()}
+                      </Typography>
+                    </Box>
+                    <Box textAlign="right">
+                      <Typography variant="body2" color="textSecondary">Credit</Typography>
+                      <Typography 
+                        variant="body1" 
+                        sx={{ 
+                          fontWeight: 600,
+                          color: sale.todayCredit > 0 ? theme.palette.warning.main : 'text.primary'
+                        }}
+                      >
+                        ₹{sale.todayCredit.toLocaleString()}
+                      </Typography>
+                    </Box>
                   </Box>
-                </TableCell>
-                <TableCell>{sale.salesQuantity}</TableCell>
-                <TableCell>{sale.emptyQuantity}</TableCell>
-                <TableCell>₹{sale.todayCredit?.toLocaleString()}</TableCell>
-                <TableCell>₹{sale.totalAmountReceived?.toLocaleString()}</TableCell>
-                <TableCell>{format(sale.timestamp, 'hh:mm a')}</TableCell>
-              </TableRow>
-            ))}
-          </TableBody>
-        </Table>
-      </Paper>
+                </CardContent>
+              </Card>
+            </Grid>
+          ))}
+        </Grid>
+      )}
     </Box>
   );
 };

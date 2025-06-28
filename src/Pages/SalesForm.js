@@ -31,7 +31,8 @@ const SalesForm = () => {
     totalBalance: 0,
     previousBalance: 0,
     date: new Date().toISOString().split('T')[0],
-    route: routeName
+    route: routeName,
+    customPrice: null // New field for custom pricing
   });
 
   // Fetch customers and products
@@ -112,7 +113,8 @@ const SalesForm = () => {
         customerId: "",
         customerData: null,
         previousBalance: 0,
-        totalBalance: prev.todayCredit - prev.totalAmountReceived
+        totalBalance: prev.todayCredit - prev.totalAmountReceived,
+        customPrice: null // Reset custom price when customer is cleared
       }));
     }
   };
@@ -126,8 +128,9 @@ const SalesForm = () => {
         ...prev,
         productId: selectedOption.value,
         productData: product,
-        todayCredit: product.price * prev.salesQuantity,
-        totalBalance: (prev.previousBalance || 0) + (product.price * prev.salesQuantity) - prev.totalAmountReceived
+        customPrice: null, // Reset custom price when product changes
+        todayCredit: (prev.customPrice || product.price) * prev.salesQuantity,
+        totalBalance: (prev.previousBalance || 0) + ((prev.customPrice || product.price) * prev.salesQuantity) - prev.totalAmountReceived
       }));
     } else {
       setSelectedProduct(null);
@@ -135,10 +138,31 @@ const SalesForm = () => {
         ...prev,
         productId: "",
         productData: null,
+        customPrice: null,
         todayCredit: 0,
         totalBalance: (prev.previousBalance || 0) - prev.totalAmountReceived
       }));
     }
+  };
+
+  // Handle custom price change
+  const handleCustomPriceChange = (e) => {
+    const { value } = e.target;
+    const price = parseFloat(value) || 0;
+    
+    setFormData(prev => {
+      const updatedData = {
+        ...prev,
+        customPrice: price > 0 ? price : null,
+        todayCredit: price > 0 ? price * prev.salesQuantity : (selectedProduct?.price || 0) * prev.salesQuantity
+      };
+      
+      updatedData.totalBalance = (updatedData.previousBalance || 0) + 
+                               updatedData.todayCredit - 
+                               updatedData.totalAmountReceived;
+      
+      return updatedData;
+    });
   };
 
   // Handle form field changes
@@ -153,7 +177,8 @@ const SalesForm = () => {
       
       // Recalculate balances when relevant fields change
       if (name === "salesQuantity" || name === "totalAmountReceived") {
-        updatedData.todayCredit = selectedProduct ? selectedProduct.price * updatedData.salesQuantity : 0;
+        const currentPrice = prev.customPrice || selectedProduct?.price || 0;
+        updatedData.todayCredit = currentPrice * updatedData.salesQuantity;
         updatedData.totalBalance = (updatedData.previousBalance || 0) + 
                                  updatedData.todayCredit - 
                                  updatedData.totalAmountReceived;
@@ -177,6 +202,9 @@ const SalesForm = () => {
         throw new Error(`Cannot take back more cylinders (${formData.emptyQuantity}) than customer has (${selectedCustomer.currentGasOnHand})`);
       }
 
+      // Determine the actual price used
+      const actualPrice = formData.customPrice || selectedProduct.price;
+
       // Prepare sale document
       const saleData = {
         ...formData,
@@ -184,7 +212,9 @@ const SalesForm = () => {
         customerPhone: selectedCustomer.phone,
         customerAddress: selectedCustomer.address,
         productName: selectedProduct.name,
-        productPrice: selectedProduct.price,
+        productPrice: actualPrice, // Use the actual price (custom or default)
+        baseProductPrice: selectedProduct.price, // Store the base price for reference
+        isCustomPrice: formData.customPrice !== null, // Flag for custom pricing
         routeName: routeName,
         timestamp: new Date(),
         status: "completed"
@@ -223,7 +253,8 @@ const SalesForm = () => {
         totalBalance: 0,
         previousBalance: 0,
         date: new Date().toISOString().split('T')[0],
-        route: routeName
+        route: routeName,
+        customPrice: null
       });
       setSelectedProduct(null);
       setSelectedCustomer(null);
@@ -331,7 +362,6 @@ const SalesForm = () => {
                   <div className="col-md-4">
                     <p><strong>Cylinders On Hand:</strong> {selectedCustomer.currentGasOnHand || 0}</p>
                   </div>
-                
                 </div>
               </div>
             )}
@@ -367,7 +397,7 @@ const SalesForm = () => {
               <>
                 <div className="row mb-3">
                   <div className="col-md-4">
-                    <label className="form-label">Product Price (₹)</label>
+                    <label className="form-label">Base Price (₹)</label>
                     <input
                       type="number"
                       className="form-control"
@@ -376,6 +406,37 @@ const SalesForm = () => {
                     />
                   </div>
                   
+                  <div className="col-md-4">
+                    <label className="form-label">
+                      Custom Price (₹) {formData.customPrice !== null && (
+                        <span className="badge bg-warning text-dark">Custom</span>
+                      )}
+                    </label>
+                    <input
+                      type="number"
+                      className="form-control"
+                      name="customPrice"
+                      value={formData.customPrice || ''}
+                      onChange={handleCustomPriceChange}
+                      placeholder="Enter custom price"
+                      min="0"
+                      step="0.01"
+                      disabled={loading.submitting}
+                    />
+                  </div>
+                  
+                  <div className="col-md-4">
+                    <label className="form-label">Actual Price (₹)</label>
+                    <input
+                      type="number"
+                      className="form-control"
+                      value={formData.customPrice || selectedProduct.price}
+                      readOnly
+                    />
+                  </div>
+                </div>
+                
+                <div className="row mb-3">
                   <div className="col-md-4">
                     <label className="form-label">Sales Quantity</label>
                     <input
